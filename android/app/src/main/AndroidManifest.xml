@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.telephone.name_generator">
    <application
-        android:label="name_generator"
+        android:label="名称推荐"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
