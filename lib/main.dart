@@ -1,113 +1,146 @@
-import 'package:flutter/material.dart';
+import 'dart:collection';
 
-void main() {
-  runApp(MyApp());
-}
+import 'package:name_generator/animated_route/slide.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:english_words/english_words.dart';
+
+typedef WordPairGenerator = Iterable<WordPair> Function(int count);
+
+void main() => runApp(MyApp());
 
 class MyApp extends StatelessWidget {
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
+    final source = new LinkedHashSet<WordPair>();
+    final favorite = new LinkedHashSet<WordPair>();
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
-        primarySwatch: Colors.blue,
-      ),
-      home: MyHomePage(title: 'Flutter Demo Home Page'),
+      title: "名称推荐",
+      home: WordPairs("挑选你喜爱的名称", source, favorite, (pair) {
+        if (favorite.contains(pair)) {
+          favorite.remove(pair);
+        } else {
+          favorite.add(pair);
+        }
+      }, true, (count) => generateWordPairs().take(count), true),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  MyHomePage({Key key, this.title}) : super(key: key);
+class WordPairs extends StatefulWidget {
+  final String _title;
+  final LinkedHashSet<WordPair> _source; // ordered set
+  final LinkedHashSet<WordPair> _favorite; // ordered set
+  final void Function(WordPair pair) _onTapInSetState;
+  final bool _growable;
+  final WordPairGenerator _generator;
+  final bool _canOpenFavorite;
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+  WordPairs(this._title, this._source, this._favorite, this._onTapInSetState,
+      this._growable, this._generator, this._canOpenFavorite);
 
   @override
-  _MyHomePageState createState() => _MyHomePageState();
+  _WordPairsState createState() => _WordPairsState(_title, _source, _favorite,
+      _onTapInSetState, _growable, _generator, _canOpenFavorite);
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _WordPairsState extends State<WordPairs> {
+  String _title;
+  LinkedHashSet<WordPair> _source; // ordered set
+  LinkedHashSet<WordPair> _favorite; // ordered set
+  void Function(WordPair pair) _onTapInSetState;
+  bool _growable;
+  WordPairGenerator _generator;
+  bool _canOpenFavorite;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  final _biggerFont = TextStyle(fontSize: 18.0);
+
+  _WordPairsState(
+      this._title,
+      this._source,
+      this._favorite,
+      this._onTapInSetState,
+      this._growable,
+      this._generator,
+      this._canOpenFavorite) {
+    this._title ??= "名称推荐";
+    this._source ??= new LinkedHashSet();
+    this._favorite ??= new LinkedHashSet();
+    this._growable ??= false;
+    this._canOpenFavorite ??= false;
+  }
+
+  Widget _buildRow(int index, WordPair pair) {
+    final bool isFavorite = _favorite.contains(pair);
+    return ListTile(
+      title: Text(
+        index.toString() + "." + pair.asPascalCase,
+        style: _biggerFont,
+      ),
+      trailing: new Icon(
+        isFavorite ? Icons.favorite : Icons.favorite_border,
+        color: isFavorite ? Colors.red : null,
+      ),
+      onTap: () {
+        setState(() {
+          _onTapInSetState?.call(pair);
+        });
+      },
+    );
+  }
+
+  Widget _buildListView() {
+    return ListView.builder(
+      itemCount: _growable ? null : _source.length * 2,
+      itemBuilder: (c, i) {
+        if (i.isOdd) return Divider();
+        final index = i ~/ 2;
+        final len = _source.length;
+        if (index >= len) {
+          final exLen = len + 10;
+          while (_source.length < exLen) {
+            _source.addAll(_generator(exLen - _source.length));
+          }
+        }
+        return _buildRow(
+          index + 1,
+          _source.elementAt(index),
+        );
+      },
+      padding: EdgeInsets.all(16.0),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: Text(_title),
+        actions: _canOpenFavorite
+            ? [
+                new IconButton(
+                    icon: const Icon(Icons.list), onPressed: _openSavedList),
+              ]
+            : null,
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headline4,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+      body: _buildListView(),
     );
+  }
+
+  void _openSavedList() {
+    Navigator.of(context)
+        .push(
+          new SlideRoute.slideInBottom(
+            page: WordPairs(
+                "收藏的名称", new LinkedHashSet.from(_favorite), _favorite, (pair) {
+              if (_favorite.contains(pair)) {
+                _favorite.remove(pair);
+              } else {
+                _favorite.add(pair);
+              }
+            }, false, null, null),
+          ),
+        )
+        .then((value) => setState(() {}));
   }
 }
